@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Abyss - By Jojox</title>
+    <style>
+        body {
+            background-color: #0a0f1a;
+            color: #d0e8ff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background-color: #10223a;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        header img {
+            height: 50px;
+            margin-right: 20px;
+        }
+
+        header h1 {
+            font-size: 24px;
+            margin: 0;
+        }
+
+        .mode-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .mode-buttons button {
+            background-color: #1a2b48;
+            color: #d0e8ff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .mode-buttons button.active {
+            background-color: #3a5ea0;
+        }
+
+        .container {
+            padding: 20px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #1a2b48;
+            color: #d0e8ff;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        li {
+            margin-bottom: 10px;
+            background-color: #142438;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        li:hover {
+            background-color: #1e3a5f;
+        }
+
+        #videoPlayer, #musicFrame {
+            width: 100%;
+            height: 500px;
+            background-color: black;
+            border: none;
+            margin: 20px 0;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .no-channel {
+            font-style: italic;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div style="display: flex; align-items: center;">
+            <img src="logo.png" alt="Logo">
+            <h1>Abyss - By Jojox</h1>
+        </div>
+        <div class="mode-buttons">
+            <button id="tvMode" class="active">TV</button>
+            <button id="musicMode">Music</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Lecteur TV (HTML5 + HLS.js) -->
+        <video id="videoPlayer" controls autoplay></video>
+
+        <!-- Lecteur Music (web app) -->
+        <iframe id="musicFrame" class="hidden" src="https://the-ultimate-songs-webapp-harsh-patel.vercel.app/songs" allowfullscreen></iframe>
+
+        <!-- Recherche + Liste Chaînes -->
+        <input type="text" id="search" placeholder="Rechercher une chaîne...">
+        <ul id="channelList">Chargement des chaînes...</ul>
+    </div>
+
+    <!-- HLS.js -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+    <script>
+        let hlsInstance = null;
+
+        async function fetchM3U() {
+            try {
+                const response = await fetch('fr.m3u');
+                const text = await response.text();
+                const lines = text.split('\n');
+                const channels = [];
+
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].startsWith('#EXTINF')) {
+                        const nameMatch = lines[i].match(/,(.*)/);
+                        const name = nameMatch ? nameMatch[1].trim() : 'Chaîne inconnue';
+                        const url = lines[i + 1]?.trim();
+                        if (url && url.startsWith('http')) {
+                            channels.push({ name, url });
+                        }
+                    }
+                }
+
+                return channels;
+            } catch (e) {
+                console.error('Erreur lors du chargement du fichier M3U:', e);
+                return [];
+            }
+        }
+
+        function displayChannels(channels) {
+            const list = document.getElementById('channelList');
+            list.innerHTML = '';
+
+            if (channels.length === 0) {
+                const li = document.createElement('li');
+                li.textContent = 'Aucune chaîne trouvée.';
+                li.className = 'no-channel';
+                list.appendChild(li);
+                return;
+            }
+
+            channels.forEach(channel => {
+                const li = document.createElement('li');
+                li.textContent = channel.name;
+                li.addEventListener('click', () => {
+                    playChannel(channel.url);
+                });
+                list.appendChild(li);
+            });
+        }
+
+        function setupSearch(channels) {
+            const searchInput = document.getElementById('search');
+            searchInput.addEventListener('input', () => {
+                const keyword = searchInput.value.toLowerCase();
+                const filtered = channels.filter(c => c.name.toLowerCase().includes(keyword));
+                displayChannels(filtered);
+            });
+        }
+
+        function playChannel(url) {
+            const video = document.getElementById('videoPlayer');
+
+            if (hlsInstance) {
+                hlsInstance.destroy();
+                hlsInstance = null;
+            }
+
+            if (Hls.isSupported()) {
+                hlsInstance = new Hls();
+                hlsInstance.loadSource(url);
+                hlsInstance.attachMedia(video);
+                hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play();
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                video.play();
+            } else {
+                alert("Ce navigateur ne supporte pas les flux vidéo en direct.");
+            }
+        }
+
+        function switchToTVMode() {
+            document.getElementById('videoPlayer').classList.remove('hidden');
+            document.getElementById('musicFrame').classList.add('hidden');
+            document.getElementById('search').classList.remove('hidden');
+            document.getElementById('channelList').classList.remove('hidden');
+            document.getElementById('tvMode').classList.add('active');
+            document.getElementById('musicMode').classList.remove('active');
+        }
+
+        function switchToMusicMode() {
+            if (hlsInstance) {
+                hlsInstance.destroy();
+                hlsInstance = null;
+            }
+
+            const video = document.getElementById('videoPlayer');
+            video.pause();
+            video.src = '';
+
+            document.getElementById('videoPlayer').classList.add('hidden');
+            document.getElementById('musicFrame').classList.remove('hidden');
+            document.getElementById('search').classList.add('hidden');
+            document.getElementById('channelList').classList.add('hidden');
+            document.getElementById('musicMode').classList.add('active');
+            document.getElementById('tvMode').classList.remove('active');
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const channels = await fetchM3U();
+            displayChannels(channels);
+            setupSearch(channels);
+
+            document.getElementById('tvMode').addEventListener('click', switchToTVMode);
+            document.getElementById('musicMode').addEventListener('click', switchToMusicMode);
+        });
+    </script>
+</body>
+</html>
