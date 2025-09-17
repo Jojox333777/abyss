@@ -10,4 +10,4 @@ HTML Music and TV Streaming platform.
 
 2 - Unzip the folder.
 
-3 - Launch "Setup.py".
+3 - Launch "server.py".
